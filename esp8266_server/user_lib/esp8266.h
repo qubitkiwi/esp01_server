@@ -20,12 +20,16 @@
 #define DMA_BUF_SIZE 512
 
 typedef struct {
-	char *SSID;
-	char *password;
 	USART_TypeDef *uart;
 	DMA_TypeDef *DMA;
-	bool uart_idle;
+	uint32_t DMA_Channel;
+
+	char *SSID;
+	char *password;
 	uint16_t port;
+
+	bool uart_idle;
+
 	char DMA_buf[DMA_BUF_SIZE];
 } ESP_CONFIG;
 
@@ -38,19 +42,22 @@ typedef enum {
 } HTTP_METHOD;
 
 
-int esp8266_init(USART_TypeDef *uart, DMA_TypeDef *DMA, char *ssid, char* pass);
-int response(char *req, int m_time);
-int wait_for(char *str, int m_time);
+
+
+int esp8266_init(USART_TypeDef *uart, DMA_TypeDef *DMA, uint32_t Channel);
+int server_init(char *ssid, char* password, uint16_t port);
 
 void esp_send(char *pdata);
-int server_init();
+int response(char *req, int m_time);
+int wait_for(char *str, int m_time);
 
 int get_IPD(char *pdata);
 HTTP_METHOD get_method(char *pdata);
 int get_path(char *pdata, char *path);
 
-int Server_GET_Handle(uint8_t *path, uint32_t IPD);
 int Server_Send(uint8_t *data, int IPD);
+int Server_GET_Handle(uint8_t *path, uint32_t IPD);
+int Server_GET_echo(uint8_t *path, uint32_t IPD);
 void NOT_found(int IPD);
 
 void uart_it();

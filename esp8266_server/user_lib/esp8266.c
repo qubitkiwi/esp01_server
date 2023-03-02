@@ -8,7 +8,7 @@
 #include "esp8266.h"
 
 
-char *HEADER = "HTTP/1.1 200 OK\r\n\r\n";
+char *get_HEADER = "HTTP/1.1 200 OK\r\n\r\n";
 char *HELLO_HTML = "<!doctype html><html><head><title>ESP8266</title></head><body><h1>esp hello world</h1></body></html>";
 
 char *NOT_found_404 = "HTTP/1.1 404 Not Found\r\n";
@@ -19,7 +19,7 @@ static ESP_CONFIG esp_config;
 
 /**
  * USART3_IRQHandler안에 있어야 하는 함수
- * uart가 idle 상태이지 확인한다.
+ * uart가 idle 상태인지 확인한다.
  */
 void uart_it() {
 	if(LL_USART_IsActiveFlag_IDLE(esp_config.uart)) {
@@ -29,29 +29,29 @@ void uart_it() {
 }
 
 
+int esp8266_init(USART_TypeDef *uart, DMA_TypeDef *DMA, uint32_t Channel) {
 
-int esp8266_init(USART_TypeDef *uart, DMA_TypeDef *DMA, char *ssid, char* pass) {
 	esp_config.uart = uart;
-	esp_config.SSID = ssid;
 	esp_config.DMA = DMA;
-	esp_config.password = pass;
+	esp_config.DMA_Channel = Channel;
+
 	esp_config.uart_idle = false;
-	esp_config.port = 80;
+
 
 	// configure dma source & destination
-	LL_DMA_ConfigAddresses(esp_config.DMA, LL_DMA_CHANNEL_3, LL_USART_DMA_GetRegAddr(esp_config.uart), (uint32_t)esp_config.DMA_buf, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
+	LL_DMA_ConfigAddresses(esp_config.DMA, esp_config.DMA_Channel, LL_USART_DMA_GetRegAddr(esp_config.uart), (uint32_t)esp_config.DMA_buf, LL_DMA_DIRECTION_PERIPH_TO_MEMORY);
 	// configure data length
-	LL_DMA_SetDataLength(esp_config.DMA, LL_DMA_CHANNEL_3, DMA_BUF_SIZE);
+	LL_DMA_SetDataLength(esp_config.DMA, esp_config.DMA_Channel, DMA_BUF_SIZE);
 
 	// enable interrupts
 	LL_USART_EnableIT_IDLE(esp_config.uart);
 
 	// enable DMA stream
 	LL_USART_EnableDMAReq_RX(esp_config.uart);
-	LL_DMA_EnableChannel(esp_config.DMA, LL_DMA_CHANNEL_3);
+	LL_DMA_EnableChannel(esp_config.DMA, esp_config.DMA_Channel);
 
 
-	return 0;
+	return 1;
 }
 
 void esp_send(char *pdata) {
@@ -66,32 +66,35 @@ void esp_send(char *pdata) {
 }
 
 int response(char *req, int m_time) {
-	uint32_t tickstart = SysTick->CTRL;
+
+	memset(req, 0, DMA_BUF_SIZE);
+
+	uint32_t tickstart = HAL_GetTick();
 
 	while (!esp_config.uart_idle) {
 		//시간 초과시 0을 리턴
-		if ((SysTick->CTRL - tickstart) > m_time)
+		if ((HAL_GetTick() - tickstart) > m_time)
 			return 0;
 	}
 
 	esp_config.uart_idle = false;
 
 	//disble DMA
-	LL_DMA_DisableChannel(esp_config.DMA, LL_DMA_CHANNEL_3);
+	LL_DMA_DisableChannel(esp_config.DMA, esp_config.DMA_Channel);
 
 	//total received size = total buffer size - left size for DMA
-	uint32_t buff_len = DMA_BUF_SIZE - LL_DMA_GetDataLength(esp_config.DMA, LL_DMA_CHANNEL_3);
+	uint32_t buff_len = DMA_BUF_SIZE - LL_DMA_GetDataLength(esp_config.DMA, esp_config.DMA_Channel);
 	memcpy(req, esp_config.DMA_buf, buff_len+1);
 	req[buff_len] = 0;
 
 	//clear DMA flags
-	esp_config.DMA->IFCR &= 0b1111 << ((LL_DMA_CHANNEL_3 -1) * 4);
+	esp_config.DMA->IFCR &= 0b1111 << ((esp_config.DMA_Channel -1) * 4);
 
 	// configure data length
-	LL_DMA_SetDataLength(esp_config.DMA, LL_DMA_CHANNEL_3, DMA_BUF_SIZE);
+	LL_DMA_SetDataLength(esp_config.DMA, esp_config.DMA_Channel, DMA_BUF_SIZE);
 
 	// enable DMA stream
-	LL_DMA_EnableChannel(esp_config.DMA, LL_DMA_CHANNEL_3);
+	LL_DMA_EnableChannel(esp_config.DMA, esp_config.DMA_Channel);
 
 
 	printf("rx len: %d\r\n%s\r\n==========\r\n", buff_len, req);
@@ -108,7 +111,6 @@ int wait_for(char *str, int m_time) {
 	char buf[512];
 
 	while ((HAL_GetTick() - tickstart) < wait) {
-		memset(buf, 0, DMA_BUF_SIZE);
 		response(buf, m_time);
 		str_ptr = strstr(buf, str);
 		if (str_ptr != NULL)
@@ -117,7 +119,11 @@ int wait_for(char *str, int m_time) {
 	return 0;
 }
 
-int server_init() {
+int server_init(char *ssid, char* password, uint16_t port) {
+
+	esp_config.SSID = ssid;
+	esp_config.password = password;
+	esp_config.port = port;
 
 	char CMD[40];
 
@@ -163,8 +169,7 @@ int server_init() {
 	if(!wait_for("OK", 1000))
 		goto SERVER_RESET;
 
-
-	return 0;
+	return 1;
 }
 
 int get_IPD(char *pdata) {
@@ -205,17 +210,34 @@ int get_path(char *pdata, char *path) {
 	return 1;
 }
 
-int Server_Handle(uint8_t *path, uint32_t IPD) {
+int Server_GET_Handle(uint8_t *path, uint32_t IPD) {
 
 	if (!strcmp(path, "/")) {
 		Server_Send(HELLO_HTML, IPD);
+	} else {
+		Server_GET_echo(path, IPD);
+//		NOT_found(IPD);
 	}
+}
+
+int Server_GET_echo(uint8_t *path, uint32_t IPD) {
+	char *html1 = "<!doctype html><html><head><title>ESP8266</title></head><body><h1>";
+	char *html2 = "</h1></body></html>";
+
+	uint32_t echo_len = strlen(html1) + strlen(html2) + strlen(path);
+
+	char echo[echo_len + 1];
+	strcpy(echo, html1);
+	strcat(echo, &path[1]);
+	strcat(echo, html2);
+
+	Server_Send(echo, IPD);
 }
 
 int Server_Send(uint8_t *pdata, int IPD) {
 
 	uint8_t CMD[40];
-	int header_len = strlen(HEADER);
+	int header_len = strlen(get_HEADER);
 	int len = strlen(pdata);
 
 	//Send Data
@@ -223,7 +245,7 @@ int Server_Send(uint8_t *pdata, int IPD) {
 	esp_send(CMD);
 	wait_for("OK", 100);
 
-	esp_send(HEADER);
+	esp_send(get_HEADER);
 	esp_send(pdata);
 	wait_for("SEND OK", 100);
 
@@ -235,7 +257,22 @@ int Server_Send(uint8_t *pdata, int IPD) {
 }
 
 void NOT_found(int IPD) {
-	Server_Send(NOT_found_404, IPD);
+
+	uint8_t CMD[40];
+	int len = strlen(NOT_found_404);
+
+	//Send Data
+	sprintf (CMD, "AT+CIPSEND=%d,%d\r\n", IPD, len);
+	esp_send(CMD);
+	wait_for("OK", 100);
+
+	esp_send(NOT_found_404);
+	wait_for("SEND OK", 100);
+
+	sprintf (CMD, "AT+CIPCLOSE=%d\r\n", IPD);
+	esp_send(CMD);
+	wait_for("OK", 100);
+
 }
 
 

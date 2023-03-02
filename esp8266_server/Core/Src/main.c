@@ -128,12 +128,12 @@ int main(void)
   CDC_RESET();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-  esp8266_init(USART3, DMA1, "ssid", "password");
+  esp8266_init(USART3, DMA1, LL_DMA_CHANNEL_3);
 
   esp_send("AT\r\n");
   response(esp_buf, 100);
 
-  server_init();
+  server_init("ssid", "password", 80);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -146,18 +146,19 @@ int main(void)
 
   while (1)
   {
-	  memset(esp_buf, 0, DMA_BUF_SIZE);
 	  response(esp_buf, 100);
 	  IPD = get_IPD(esp_buf);
 	  if (IPD >= 0) {
 		  http_method = get_method(esp_buf);
+		  memset(path, 0, 40);
+		  get_path(esp_buf, path);
+
 		  if (http_method == HTTP_GET) {
-			  get_path(esp_buf, path);
-			  path_ptr = strcmp(path, "/");
-			  if (path_ptr== NULL) {
-				  Server_Handle("/", IPD);
-			  } else {
-				  NOT_found(IPD);
+			  Server_GET_Handle(path, IPD);
+
+			  // get 메소스시 mcu가 수행할 것
+			  if (!strcmp(path, "/")) {
+
 			  }
 		  } else {
 			  NOT_found(IPD);
