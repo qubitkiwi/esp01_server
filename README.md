@@ -15,4 +15,4 @@ PUT /gpio 요청은 body를 읽고 LED 상태를 변환합니다.
 
 주의사항: wifi 모듈이 전류를 많이 먹어 별도의 전원이 필요합니다.
 
-<img src="led_control.webm">
+[led_control.webm](https://user-images.githubusercontent.com/68237656/224910526-1cae7d3b-33e4-4705-83e5-171c107a10bf.webm)
