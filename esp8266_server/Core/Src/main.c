@@ -61,8 +61,8 @@ static void MX_USART3_UART_Init(void);
 extern uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);
 
 int _write(int32_t file, uint8_t *ptr, int32_t len) {
-	while(CDC_Transmit_FS( (uint8_t*)ptr, (uint16_t)len) == USBD_BUSY);
-//	CDC_Transmit_FS( (uint8_t*)ptr, (uint16_t)len);
+//	while(CDC_Transmit_FS( (uint8_t*)ptr, (uint16_t)len) == USBD_BUSY);
+	CDC_Transmit_FS( (uint8_t*)ptr, (uint16_t)len);
   return len;
 }
 
@@ -131,18 +131,19 @@ int main(void)
   esp8266_init(USART3, DMA1, LL_DMA_CHANNEL_3);
 
   esp_send("AT\r\n");
-  response(esp_buf, 100);
+  wait_for("OK", 1000);
 
-  server_init("ssid", "password", 80);
+  server_init("SSID", "passward", 80);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
   int IPD;
-  char path[40];
-  HTTP_METHOD http_method;
   char *path_ptr;
+  char *body_ptr;
+  HTTP_METHOD http_method;
+
 
   while (1)
   {
@@ -150,22 +151,18 @@ int main(void)
 	  IPD = get_IPD(esp_buf);
 	  if (IPD >= 0) {
 		  http_method = get_method(esp_buf);
-		  memset(path, 0, 40);
-		  get_path(esp_buf, path);
+		  path_ptr = get_path_ptr(esp_buf);
 
 		  if (http_method == HTTP_GET) {
-			  Server_GET_Handle(path, IPD);
-
-			  // get 메소스시 mcu가 수행할 것
-			  if (!strcmp(path, "/")) {
-
-			  }
-		  } else {
+			  Server_GET_Handle(path_ptr, IPD);
+		  } else if (http_method == HTTP_PUT) {
+			  body_ptr = get_body_ptr(esp_buf);
+			  Server_PUT_Handle(path_ptr, body_ptr, IPD);
+		  }else {
 			  NOT_found(IPD);
 		  }
 	  }
 
-	  LL_mDelay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -317,11 +314,22 @@ static void MX_DMA_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOD);
-  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
   LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOA);
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_GPIOB);
+
+  /**/
+  LL_GPIO_ResetOutputPin(GPIOA, LL_GPIO_PIN_3|LL_GPIO_PIN_4|LL_GPIO_PIN_5);
+
+  /**/
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_3|LL_GPIO_PIN_4|LL_GPIO_PIN_5;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_OUTPUT;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 }
 

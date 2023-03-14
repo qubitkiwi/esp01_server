@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>esp8366</title>
+</head>
+<body>
+    <button id='gpio1' num='0'>GPIO</button>
+    <output id='state1'></output>
+    <br>
+    <button id='gpio2' num='1'>GPIO</button>
+    <output id='state2'></output>
+    <br>
+    <button id='gpio3' num='2'>GPIO</button>
+    <output id='state3'></output>
+    <br>
+    <script>
+        const gpio1 = document.getElementById('gpio1');
+        const gpio2 = document.getElementById('gpio2');
+        const gpio3 = document.getElementById('gpio3');
+
+        const state1 = document.getElementById('state1');
+        const state2 = document.getElementById('state2');
+        const state3 = document.getElementById('state3');
+
+        let status = [0, 0, 0];
+
+        const rander = () => {
+            state1.textContent = (status[0] == 1) ? 'gpio on' : 'gpio off';
+            state2.textContent = (status[1] == 1) ? 'gpio on' : 'gpio off';
+            state3.textContent = (status[2] == 1) ? 'gpio on' : 'gpio off';
+        };
+
+        const gpio_update = async () => {
+            await fetch('/gpio')
+                .then((res) => res.json())
+                .then((data) => status = data);
+            rander();
+        };
+
+        setInterval(gpio_update, 1000);
+        gpio_update();
+
+        const put_gpio = (e) => {
+            const num = parseInt(e.target.num, 10);
+            status[num] = (status[num] == 1) ? 0 : 1;
+            fetch('/gpio', {
+                method: 'PUT',
+                body: JSON.stringify(status)
+            });
+            rander();
+        };
+
+        gpio1.addEventListener('click', put_gpio);
+        gpio2.addEventListener('click', put_gpio);
+        gpio3.addEventListener('click', put_gpio);
+    </script>
+</body>
+</html>

@@ -8,6 +8,11 @@ uart, dma, gpio를 LL 라이브러리를 사용하여 구현했습니다.
 
 usb cdc를 이용하여 esp8266에서 받은 데이터를 pc로 전송합니다.
 
-pc에서 stm32로 보내는건 되지 않습니다.
+GET /gpio 요청에는 현재 LED 상태를 배열로 전송합니다. 브라우저가 1초마다 요청합니다.
 
-<img src="picture.png">
+PUT /gpio 요청은 body를 읽고 LED 상태를 변환합니다.
+
+
+주의사항: wifi 모듈이 전류를 많이 먹어 별도의 전원이 필요합니다.
+
+<img src="led_control.webm">

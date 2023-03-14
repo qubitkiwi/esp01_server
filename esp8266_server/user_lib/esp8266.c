@@ -6,12 +6,9 @@
  */
 
 #include "esp8266.h"
+#include "html.h"
+#include "led.h"
 
-
-char *get_HEADER = "HTTP/1.1 200 OK\r\n\r\n";
-char *HELLO_HTML = "<!doctype html><html><head><title>ESP8266</title></head><body><h1>esp hello world</h1></body></html>";
-
-char *NOT_found_404 = "HTTP/1.1 404 Not Found\r\n";
 
 
 static ESP_CONFIG esp_config;
@@ -173,7 +170,7 @@ int server_init(char *ssid, char* password, uint16_t port) {
 }
 
 int get_IPD(char *pdata) {
-	uint8_t *IPD_ptr;
+	char *IPD_ptr;
 	IPD_ptr = strstr(pdata, "+IPD");
 
 	if (IPD_ptr == NULL)
@@ -194,50 +191,41 @@ HTTP_METHOD get_method(char *pdata) {
 }
 
 
-int get_path(char *pdata, char *path) {
-	uint8_t *path_ptr;
-	int i;
-	path_ptr = strstr(pdata, "/");
+char* get_path_ptr(char *pdata) {
+
+	char *path_ptr;
+
+	path_ptr = strstr(pdata, "HTTP");
 
 	if (path_ptr == NULL)
-		return -1;
+		return NULL;
 
-	for (i=0; *(path_ptr+i) != ' '; i++) {
-		path[i] = *(path_ptr+i);
+	while (!(*(path_ptr-1) == ' ' && *path_ptr == '/')) {
+		path_ptr--;
 	}
-	path[i] = 0;
 
-	return 1;
+	return path_ptr;
 }
 
-int Server_GET_Handle(uint8_t *path, uint32_t IPD) {
+char* get_body_ptr(char *pdata) {
 
-	if (!strcmp(path, "/")) {
-		Server_Send(HELLO_HTML, IPD);
-	} else {
-		Server_GET_echo(path, IPD);
-//		NOT_found(IPD);
+	char *body_ptr;
+	body_ptr = strstr(pdata, "\r\n\r\n");
+
+	while (body_ptr != NULL) {
+		body_ptr += 4;
+		if (strncmp(body_ptr, "+IPD", 4)) {
+			return body_ptr;
+		}
+		body_ptr = strstr(body_ptr, "\r\n\r\n");
 	}
-}
-
-int Server_GET_echo(uint8_t *path, uint32_t IPD) {
-	char *html1 = "<!doctype html><html><head><title>ESP8266</title></head><body><h1>";
-	char *html2 = "</h1></body></html>";
-
-	uint32_t echo_len = strlen(html1) + strlen(html2) + strlen(path);
-
-	char echo[echo_len + 1];
-	strcpy(echo, html1);
-	strcat(echo, &path[1]);
-	strcat(echo, html2);
-
-	Server_Send(echo, IPD);
+	return NULL;
 }
 
 int Server_Send(uint8_t *pdata, int IPD) {
 
 	uint8_t CMD[40];
-	int header_len = strlen(get_HEADER);
+	int header_len = strlen(OK_HEADER);
 	int len = strlen(pdata);
 
 	//Send Data
@@ -245,7 +233,7 @@ int Server_Send(uint8_t *pdata, int IPD) {
 	esp_send(CMD);
 	wait_for("OK", 100);
 
-	esp_send(get_HEADER);
+	esp_send(OK_HEADER);
 	esp_send(pdata);
 	wait_for("SEND OK", 100);
 
@@ -272,7 +260,70 @@ void NOT_found(int IPD) {
 	sprintf (CMD, "AT+CIPCLOSE=%d\r\n", IPD);
 	esp_send(CMD);
 	wait_for("OK", 100);
-
 }
 
+////// HTTP GET
+
+int Server_GET_Handle(char *path, int IPD) {
+
+	if (!strncmp(path, "/gpio", 5)) {
+		GET_GPIO(IPD);
+	} else if (!strncmp(path, "/", 1)) {
+		Server_Send(ROOT_HTML, IPD);
+	} else {
+//		Server_GET_echo(path, IPD);
+		NOT_found(IPD);
+	}
+}
+
+int Server_GET_echo(uint8_t *path, int IPD) {
+	const char *html1 = "<!doctype html><html><head><title>ESP8266</title></head><body><h1>";
+	const char *html2 = "</h1></body></html>";
+
+	uint32_t echo_len = strlen(html1) + strlen(html2) + strlen(path);
+
+	char echo[echo_len + 1];
+	strcpy(echo, html1);
+	strcat(echo, &path[1]);
+	strcat(echo, html2);
+
+	Server_Send(echo, IPD);
+}
+
+int GET_GPIO(int IPD) {
+	char data[15];
+	uint32_t led_status[3];
+	for (uint16_t i=0; i<LED_NUM_MAX; i++) {
+		led_status[i] = led_read(i);
+	}
+	sprintf(data, "[%d,%d,%d]", led_status[0], led_status[1], led_status[2]);
+
+	Server_Send(data, IPD);
+}
+
+
+////// HTTP_PUT
+
+int Server_PUT_Handle(char *path, char *body, int IPD) {
+	if (!strncmp(path, "/gpio", 5)) {
+		PUT_GPIO(body, IPD);
+		Server_Send("\0", IPD);
+	}else {
+		NOT_found(IPD);
+	}
+	return 0;
+}
+
+
+int PUT_GPIO(char *body, int IPD) {
+	//문자열로 된 배열을 실제 배열로 변환
+	int led_status[3];
+	string_to_int_arr(led_status, body, LED_NUM_MAX);
+	//받은 배열되로 led 상태를 변환
+	for (int i=0; i<3; i++) {
+		led_wirte(i, led_status[i]);
+	}
+
+	return 0;
+}
 

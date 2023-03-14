@@ -15,7 +15,7 @@
 #include "stdint.h"
 #include "string.h"
 #include "stdbool.h"
-
+#include "common.h"
 
 #define DMA_BUF_SIZE 512
 
@@ -42,8 +42,6 @@ typedef enum {
 } HTTP_METHOD;
 
 
-
-
 int esp8266_init(USART_TypeDef *uart, DMA_TypeDef *DMA, uint32_t Channel);
 int server_init(char *ssid, char* password, uint16_t port);
 
@@ -53,12 +51,18 @@ int wait_for(char *str, int m_time);
 
 int get_IPD(char *pdata);
 HTTP_METHOD get_method(char *pdata);
-int get_path(char *pdata, char *path);
+char* get_path_ptr(char *pdata);
+char* get_body_ptr(char *pdata);
 
 int Server_Send(uint8_t *data, int IPD);
-int Server_GET_Handle(uint8_t *path, uint32_t IPD);
-int Server_GET_echo(uint8_t *path, uint32_t IPD);
 void NOT_found(int IPD);
+
+int Server_GET_Handle(char *path, int IPD);
+int GET_GPIO(int IPD);
+int Server_GET_echo(uint8_t *path, int IPD);
+
+int Server_PUT_Handle(char *path, char *body, int IPD);
+int PUT_GPIO(char *body, int IPD);
 
 void uart_it();
 
